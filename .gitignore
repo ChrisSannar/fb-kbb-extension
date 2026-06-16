@@ -1,7 +1,8 @@
 node_modules/
 
-# scraper probe dumps
+# scraper probe dumps + persistent browser profile
 scraper/samples/
+scraper/.profile/
 
 # logs / OS cruft
 *.log

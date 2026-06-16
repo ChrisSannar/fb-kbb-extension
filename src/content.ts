@@ -1,4 +1,4 @@
-import { parseVehicle, type ListingInput } from "./parse-listing";
+import { parseVehicle, type ListingInput, type ParsedVehicle } from "./parse-listing";
 import { buildKbbUrl, slugify } from "./url-builder";
 import { resolveMakeSlug } from "./makes";
 import { selectStyle, lookupStyles } from "./select-style";
@@ -7,7 +7,13 @@ import taxonomyData from "../extension/taxonomy.json";
 
 const TAXONOMY = taxonomyData as KbbTaxonomy;
 
-const BTN_ID = "fb-kbb-btn";
+/** What the popup asks for, and what it gets back. */
+export interface KbbRequest {
+  type: "GET_KBB";
+}
+export type KbbResult =
+  | { ok: true; vehicle: ParsedVehicle; kbbUrl: string }
+  | { ok: false; error: string };
 
 /** Listing title — FB renders it as the page's main <h1>. */
 function readTitle(): string | undefined {
@@ -33,68 +39,30 @@ function readFields(): Record<string, string> {
   return fields;
 }
 
-function buildUrl(): string | null {
+/** Parse the current page and build a KBB URL, or explain why we can't. */
+function buildResult(): KbbResult {
+  if (!location.pathname.includes("/marketplace/item/")) {
+    return { ok: false, error: "Open a Facebook Marketplace vehicle listing first." };
+  }
   const input: ListingInput = { title: readTitle(), fields: readFields() };
   const v = parseVehicle(input);
-  if (!v) return null;
+  if (!v) {
+    return { ok: false, error: "Couldn't read the year, make, and model from this listing." };
+  }
   const makeSlug = resolveMakeSlug(v.make);
   const modelSlug = slugify(v.model);
   // Phase 2: exact Style from the bundled Taxonomy; falls back to year-level
   // (v1 behaviour) when the vehicle isn't in the Taxonomy.
   const style = selectStyle(lookupStyles(TAXONOMY, makeSlug, modelSlug, v.year), v.trim);
-  return buildKbbUrl({ makeSlug, modelSlug, year: v.year, style });
+  const kbbUrl = buildKbbUrl({ makeSlug, modelSlug, year: v.year, style });
+  return { ok: true, vehicle: v, kbbUrl };
 }
 
-function render(): void {
-  const isItem = location.pathname.includes("/marketplace/item/");
-  const existing = document.getElementById(BTN_ID);
-  if (!isItem) {
-    existing?.remove();
-    return;
-  }
-  const url = buildUrl();
-  if (!url) {
-    existing?.remove();
-    return;
-  }
-
-  const btn = (existing as HTMLAnchorElement) ?? document.createElement("a");
-  btn.id = BTN_ID;
-  btn.textContent = "Check on KBB";
-  (btn as HTMLAnchorElement).href = url;
-  (btn as HTMLAnchorElement).target = "_blank";
-  (btn as HTMLAnchorElement).rel = "noopener";
-  Object.assign(btn.style, {
-    position: "fixed",
-    bottom: "24px",
-    right: "24px",
-    zIndex: "2147483647",
-    padding: "10px 16px",
-    background: "#0b6efd",
-    color: "#fff",
-    font: "600 14px system-ui, sans-serif",
-    borderRadius: "8px",
-    textDecoration: "none",
-    boxShadow: "0 2px 8px rgba(0,0,0,.3)",
-  } satisfies Partial<CSSStyleDeclaration>);
-  if (!existing) document.body.appendChild(btn);
-}
-
-// FB is a SPA: re-render on DOM churn and on URL changes, throttled.
-let timer: number | undefined;
-function schedule(): void {
-  clearTimeout(timer);
-  timer = window.setTimeout(render, 400);
-}
-
-new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
-
-let lastPath = location.pathname;
-setInterval(() => {
-  if (location.pathname !== lastPath) {
-    lastPath = location.pathname;
-    schedule();
-  }
-}, 800);
-
-schedule();
+chrome.runtime.onMessage.addListener(
+  (msg: KbbRequest, _sender, sendResponse: (r: KbbResult) => void) => {
+    if (msg?.type === "GET_KBB") {
+      sendResponse(buildResult());
+    }
+    return false; // responded synchronously
+  },
+);

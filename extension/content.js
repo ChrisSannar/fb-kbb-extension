@@ -135,7 +135,6 @@ var taxonomy_default = {};
 
 // src/content.ts
 var TAXONOMY = taxonomy_default;
-var BTN_ID = "fb-kbb-btn";
 function readTitle() {
   return document.querySelector("h1")?.textContent?.trim() || undefined;
 }
@@ -152,61 +151,24 @@ function readFields() {
   }
   return fields;
 }
-function buildUrl() {
+function buildResult() {
+  if (!location.pathname.includes("/marketplace/item/")) {
+    return { ok: false, error: "Open a Facebook Marketplace vehicle listing first." };
+  }
   const input = { title: readTitle(), fields: readFields() };
   const v = parseVehicle(input);
-  if (!v)
-    return null;
+  if (!v) {
+    return { ok: false, error: "Couldn't read the year, make, and model from this listing." };
+  }
   const makeSlug = resolveMakeSlug(v.make);
   const modelSlug = slugify(v.model);
   const style = selectStyle(lookupStyles(TAXONOMY, makeSlug, modelSlug, v.year), v.trim);
-  return buildKbbUrl({ makeSlug, modelSlug, year: v.year, style });
+  const kbbUrl = buildKbbUrl({ makeSlug, modelSlug, year: v.year, style });
+  return { ok: true, vehicle: v, kbbUrl };
 }
-function render() {
-  const isItem = location.pathname.includes("/marketplace/item/");
-  const existing = document.getElementById(BTN_ID);
-  if (!isItem) {
-    existing?.remove();
-    return;
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "GET_KBB") {
+    sendResponse(buildResult());
   }
-  const url = buildUrl();
-  if (!url) {
-    existing?.remove();
-    return;
-  }
-  const btn = existing ?? document.createElement("a");
-  btn.id = BTN_ID;
-  btn.textContent = "Check on KBB";
-  btn.href = url;
-  btn.target = "_blank";
-  btn.rel = "noopener";
-  Object.assign(btn.style, {
-    position: "fixed",
-    bottom: "24px",
-    right: "24px",
-    zIndex: "2147483647",
-    padding: "10px 16px",
-    background: "#0b6efd",
-    color: "#fff",
-    font: "600 14px system-ui, sans-serif",
-    borderRadius: "8px",
-    textDecoration: "none",
-    boxShadow: "0 2px 8px rgba(0,0,0,.3)"
-  });
-  if (!existing)
-    document.body.appendChild(btn);
-}
-var timer;
-function schedule() {
-  clearTimeout(timer);
-  timer = window.setTimeout(render, 400);
-}
-new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
-var lastPath = location.pathname;
-setInterval(() => {
-  if (location.pathname !== lastPath) {
-    lastPath = location.pathname;
-    schedule();
-  }
-}, 800);
-schedule();
+  return false;
+});

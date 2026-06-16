@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "build": "bun build src/content.ts --outfile extension/content.js --target browser",
+    "build": "bun build src/content.ts src/popup.ts src/background.ts --outdir extension --target browser",
+    "icons": "bun run scripts/make-icons.ts",
     "typecheck": "tsc --noEmit",
     "scrape": "bun run scraper/scrape.ts",
     "probe": "bun run scraper/scrape.ts --probe"

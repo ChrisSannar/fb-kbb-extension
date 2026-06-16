@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        width: 260px;
+        margin: 0;
+        padding: 12px;
+        font: 14px system-ui, sans-serif;
+      }
+      #vehicle {
+        font-weight: 600;
+        margin: 0 0 10px;
+        line-height: 1.3;
+      }
+      .row {
+        display: block;
+        padding: 9px 12px;
+        margin-bottom: 6px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      a.row {
+        background: #0b6efd;
+        color: #fff;
+      }
+      a.row:hover { background: #0a5ed8; }
+      .row.disabled {
+        background: rgba(127, 127, 127, 0.18);
+        color: #888;
+        cursor: default;
+      }
+      .soon { font-weight: 400; font-size: 12px; }
+      #error {
+        margin: 4px 0;
+        color: #b00020;
+        line-height: 1.4;
+      }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <p id="vehicle" class="hidden"></p>
+    <p id="error" class="hidden"></p>
+    <a id="kbb" class="row hidden" target="_blank" rel="noopener">Check on KBB</a>
+    <span class="row disabled">CarComplaints <span class="soon">— soon</span></span>
+    <script src="popup.js"></script>
+  </body>
+</html>
