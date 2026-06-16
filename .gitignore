@@ -1,0 +1,8 @@
+node_modules/
+
+# scraper probe dumps
+scraper/samples/
+
+# logs / OS cruft
+*.log
+.DS_Store

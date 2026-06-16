@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "FB Marketplace → KBB",
+  "version": "0.0.1",
+  "description": "Adds a 'Check on KBB' button to Facebook Marketplace car listings that opens the matching Kelley Blue Book valuation page.",
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/marketplace/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
