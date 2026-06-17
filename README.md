@@ -1,6 +1,6 @@
 # fb-kbb-extension
 
-Private Chrome extension. Adds a **toolbar icon** that, while you're on a Facebook Marketplace car listing, opens a small popup with a **"Check on KBB"** link to the matching Kelley Blue Book valuation page (CarComplaints slot is stubbed for later). Personal use only — not published.
+Private Chrome extension. Adds a **toolbar icon** that, while you're on a Facebook Marketplace car listing, opens a small popup with two sections — a **"Check on KBB"** link to the matching Kelley Blue Book valuation page, and a **"View on CarComplaints"** link to the matching CarComplaints.com page. Both have editable, prefilled fields. Personal use only — not published.
 
 ---
 

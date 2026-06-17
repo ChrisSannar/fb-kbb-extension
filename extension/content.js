@@ -67,10 +67,6 @@ function resolveMakeSlug(make) {
   const key = make.trim().toLowerCase();
   return MAKE_SLUG_OVERRIDES[key] ?? slugify(make);
 }
-var MAKE_DISPLAY = Object.fromEntries(MAKES.map((m) => [resolveMakeSlug(m), m]));
-function makeDisplayName(slug) {
-  return MAKE_DISPLAY[slug];
-}
 
 // src/parse-listing.ts
 var YEAR_RE = /\b(19[5-9]\d|20[0-4]\d)\b/;

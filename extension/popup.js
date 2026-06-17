@@ -21,6 +21,18 @@ function buildKbbUrl(params) {
   return `${BASE}${path}?${query.toString()}`;
 }
 
+// src/carcomplaints.ts
+var BASE2 = "https://www.carcomplaints.com";
+function ccSegment(value) {
+  return value.trim().replace(/\s+/g, "_");
+}
+function ccModelSegment(value) {
+  return value.trim().split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("_");
+}
+function buildCarComplaintsUrl({ make, model, year }) {
+  return `${BASE2}/${ccSegment(make)}/${ccModelSegment(model)}/${year}/`;
+}
+
 // src/makes.ts
 var MAKES = [
   "Alfa Romeo",
@@ -66,36 +78,6 @@ var MAKE_SLUG_OVERRIDES = {};
 function resolveMakeSlug(make) {
   const key = make.trim().toLowerCase();
   return MAKE_SLUG_OVERRIDES[key] ?? slugify(make);
-}
-var MAKE_DISPLAY = Object.fromEntries(MAKES.map((m) => [resolveMakeSlug(m), m]));
-function makeDisplayName(slug) {
-  return MAKE_DISPLAY[slug];
-}
-
-// src/carcomplaints.ts
-var BASE2 = "https://www.carcomplaints.com";
-var CC_MODEL_OVERRIDES = {
-  "cx-5": "CX-5",
-  "cx-9": "CX-9",
-  "cx-30": "CX-30",
-  "cx-50": "CX-50",
-  "cx-70": "CX-70",
-  "cx-90": "CX-90",
-  "mx-5-miata": "MX-5_Miata",
-  mazda3: "Mazda3",
-  mazda6: "Mazda6",
-  "f-150": "F-150",
-  "f-250": "F-250",
-  "f-350": "F-350"
-};
-function toSegment(slug) {
-  return slug.split("-").map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join("_");
-}
-function buildCarComplaintsUrl(params) {
-  const { make, model, year } = params;
-  const makeSeg = (makeDisplayName(make) ?? toSegment(make)).replace(/ /g, "_");
-  const modelSeg = CC_MODEL_OVERRIDES[model] ?? toSegment(model);
-  return `${BASE2}/${makeSeg}/${modelSeg}/${year}/`;
 }
 
 // src/select-style.ts
@@ -162,8 +144,12 @@ var modelEl = $("model");
 var yearEl = $("year");
 var labelEl = $("label");
 var link = $("kbb");
-var ccLink = $("carcomplaints");
-var form = $("form");
+var kbbSection = $("kbbSection");
+var ccMakeEl = $("ccMake");
+var ccModelEl = $("ccModel");
+var ccYearEl = $("ccYear");
+var ccLink = $("cc");
+var ccSection = $("ccSection");
 var errorEl = $("error");
 var loadingEl = $("loading");
 var labelTouched = false;
@@ -207,7 +193,6 @@ function refresh() {
   const yearNum = Number(year);
   if (!make || !model || !year || Number.isNaN(yearNum)) {
     link.classList.add("hidden");
-    ccLink.classList.add("hidden");
     return;
   }
   link.href = buildKbbUrl({
@@ -217,6 +202,15 @@ function refresh() {
     style: resolveStyle(styles)
   });
   link.classList.remove("hidden");
+}
+function refreshCC() {
+  const make = ccMakeEl.value.trim();
+  const model = ccModelEl.value.trim();
+  const yearNum = Number(ccYearEl.value.trim());
+  if (!make || !model || !ccYearEl.value.trim() || Number.isNaN(yearNum)) {
+    ccLink.classList.add("hidden");
+    return;
+  }
   ccLink.href = buildCarComplaintsUrl({ make, model, year: yearNum });
   ccLink.classList.remove("hidden");
 }
@@ -228,9 +222,14 @@ function prefill(v) {
     const style = selectStyle(lookupStyles(TAXONOMY, makeEl.value, modelEl.value, v.year), v.trim);
     if (style)
       labelEl.value = style.label ?? style.slug;
+    ccMakeEl.value = v.make;
+    ccModelEl.value = v.model;
+    ccYearEl.value = String(v.year);
   }
   fillDatalist("makes", Object.keys(TAXONOMY).sort());
+  fillDatalist("ccMakes", MAKES);
   refresh();
+  refreshCC();
 }
 async function main() {
   labelEl.addEventListener("input", () => {
@@ -238,6 +237,9 @@ async function main() {
   });
   for (const el of [makeEl, modelEl, yearEl, labelEl]) {
     el.addEventListener("input", refresh);
+  }
+  for (const el of [ccMakeEl, ccModelEl, ccYearEl]) {
+    el.addEventListener("input", refreshCC);
   }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
@@ -254,7 +256,8 @@ async function main() {
       showError(res.error);
       return;
     }
-    form.classList.remove("hidden");
+    kbbSection.classList.remove("hidden");
+    ccSection.classList.remove("hidden");
     prefill(res.vehicle);
   } catch {
     loadingEl.classList.add("hidden");

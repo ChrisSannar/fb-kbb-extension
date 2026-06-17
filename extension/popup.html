@@ -65,7 +65,15 @@
         color: #888;
         cursor: default;
       }
-      .soon { font-weight: 400; font-size: 12px; }
+      h2 {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #888;
+        margin: 0 0 8px;
+      }
+      section + section { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(127, 127, 127, 0.25); }
       #error {
         margin: 4px 0;
         color: #b00020;
@@ -76,19 +84,32 @@
   </head>
   <body>
     <div id="loading"><span class="spinner"></span> Reading listing…</div>
-    <form id="form" class="hidden" autocomplete="off">
-      <label>Make <input id="make" list="makes" /></label>
-      <label>Model <input id="model" list="models" /></label>
-      <label>Year <input id="year" list="years" inputmode="numeric" /></label>
-      <label>Style <input id="label" list="labels" placeholder="(optional)" /></label>
-      <datalist id="makes"></datalist>
-      <datalist id="models"></datalist>
-      <datalist id="years"></datalist>
-      <datalist id="labels"></datalist>
-    </form>
+
+    <section id="kbbSection" class="hidden">
+      <h2>Kelley Blue Book</h2>
+      <form id="form" autocomplete="off">
+        <label>Make <input id="make" list="makes" /></label>
+        <label>Model <input id="model" list="models" /></label>
+        <label>Year <input id="year" list="years" inputmode="numeric" /></label>
+        <label>Style <input id="label" list="labels" placeholder="(optional)" /></label>
+        <datalist id="makes"></datalist>
+        <datalist id="models"></datalist>
+        <datalist id="years"></datalist>
+        <datalist id="labels"></datalist>
+      </form>
+      <a id="kbb" class="row hidden" target="_blank" rel="noopener">Check on KBB</a>
+    </section>
+
+    <section id="ccSection" class="hidden">
+      <h2>CarComplaints</h2>
+      <label>Make <input id="ccMake" list="ccMakes" /></label>
+      <label>Model <input id="ccModel" /></label>
+      <label>Year <input id="ccYear" inputmode="numeric" /></label>
+      <datalist id="ccMakes"></datalist>
+      <a id="cc" class="row hidden" target="_blank" rel="noopener">View on CarComplaints</a>
+    </section>
+
     <p id="error" class="hidden"></p>
-    <a id="kbb" class="row hidden" target="_blank" rel="noopener">Check on KBB</a>
-    <span class="row disabled">CarComplaints <span class="soon">— soon</span></span>
     <script src="popup.js"></script>
   </body>
 </html>

@@ -2,7 +2,8 @@ import type { KbbRequest, KbbResult } from "./content";
 import type { ParsedVehicle } from "./parse-listing";
 import type { KbbStyle, KbbTaxonomy } from "./taxonomy";
 import { buildKbbUrl, slugify } from "./url-builder";
-import { resolveMakeSlug } from "./makes";
+import { buildCarComplaintsUrl } from "./carcomplaints";
+import { MAKES, resolveMakeSlug } from "./makes";
 import { selectStyle, lookupStyles } from "./select-style";
 import taxonomyData from "../extension/taxonomy.json";
 
@@ -15,7 +16,14 @@ const modelEl = $<HTMLInputElement>("model");
 const yearEl = $<HTMLInputElement>("year");
 const labelEl = $<HTMLInputElement>("label");
 const link = $<HTMLAnchorElement>("kbb");
-const form = $("form");
+const kbbSection = $("kbbSection");
+
+const ccMakeEl = $<HTMLInputElement>("ccMake");
+const ccModelEl = $<HTMLInputElement>("ccModel");
+const ccYearEl = $<HTMLInputElement>("ccYear");
+const ccLink = $<HTMLAnchorElement>("cc");
+const ccSection = $("ccSection");
+
 const errorEl = $("error");
 const loadingEl = $("loading");
 
@@ -97,6 +105,23 @@ function refresh(): void {
   link.classList.remove("hidden");
 }
 
+/**
+ * Rebuild the CarComplaints link from its own (human-cased) fields. Independent
+ * of the KBB section — CarComplaints needs the listing's real make/model casing,
+ * not the lossy KBB slug.
+ */
+function refreshCC(): void {
+  const make = ccMakeEl.value.trim();
+  const model = ccModelEl.value.trim();
+  const yearNum = Number(ccYearEl.value.trim());
+  if (!make || !model || !ccYearEl.value.trim() || Number.isNaN(yearNum)) {
+    ccLink.classList.add("hidden");
+    return;
+  }
+  ccLink.href = buildCarComplaintsUrl({ make, model, year: yearNum });
+  ccLink.classList.remove("hidden");
+}
+
 /** Seed the fields from the page parse (everything stays editable). */
 function prefill(v: ParsedVehicle | null): void {
   if (v) {
@@ -108,9 +133,16 @@ function prefill(v: ParsedVehicle | null): void {
       v.trim,
     );
     if (style) labelEl.value = style.label ?? style.slug;
+
+    // CarComplaints fields keep the listing's human casing (e.g. "Mazda", "CX-5").
+    ccMakeEl.value = v.make;
+    ccModelEl.value = v.model;
+    ccYearEl.value = String(v.year);
   }
   fillDatalist("makes", Object.keys(TAXONOMY).sort());
+  fillDatalist("ccMakes", MAKES);
   refresh();
+  refreshCC();
 }
 
 async function main(): Promise<void> {
@@ -121,6 +153,9 @@ async function main(): Promise<void> {
   });
   for (const el of [makeEl, modelEl, yearEl, labelEl]) {
     el.addEventListener("input", refresh);
+  }
+  for (const el of [ccMakeEl, ccModelEl, ccYearEl]) {
+    el.addEventListener("input", refreshCC);
   }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
@@ -137,7 +172,8 @@ async function main(): Promise<void> {
       showError(res.error);
       return;
     }
-    form.classList.remove("hidden");
+    kbbSection.classList.remove("hidden");
+    ccSection.classList.remove("hidden");
     prefill(res.vehicle);
   } catch {
     // No content script on this page (not a facebook.com/marketplace tab).
