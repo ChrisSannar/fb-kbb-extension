@@ -5,6 +5,9 @@
  *   bunx playwright install chromium     # once
  *   bun run probe                        # verify page structure first
  *   bun run scrape -- honda toyota       # scrape specific makes (or all if none given)
+ *   bun run scrape -- mazda/tribute      # targeted: one model (incl. discontinued
+ *                                        # ones not linked from the make page)
+ *   bun run scrape -- mazda/tribute/2005 # targeted: one model-year only
  *
  * Env:
  *   HEADLESS=1     run headless (default is headful — far better against Akamai)
@@ -26,6 +29,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MAKES, resolveMakeSlug } from "../src/makes";
+import { slugify } from "../src/url-builder";
 import type { KbbTaxonomy, KbbStyle } from "../src/taxonomy";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -134,37 +138,75 @@ async function probe(page: Page): Promise<void> {
   console.log("\nInspect the samples, confirm the child-link regexes, then run `bun run scrape`.");
 }
 
-async function scrape(page: Page, makeFilter: string[]): Promise<void> {
+/** One model: walk its years (or just `yearFilter`) and record each year's styles. */
+async function scrapeModel(
+  page: Page,
+  taxonomy: KbbTaxonomy,
+  mk: string,
+  model: string,
+  yearFilter?: string,
+): Promise<void> {
+  // With an explicit year, go straight to the year page — a discontinued
+  // model's older years may not be linked from its model page either.
+  let years: string[];
+  if (yearFilter) {
+    years = [yearFilter];
+  } else {
+    if (!(await goto(page, `${BASE}/${mk}/${model}/`))) return;
+    years = await childSlugs(page, new RegExp(`^/${mk}/${model}/((?:19|20)\\d\\d)/?$`));
+  }
+
+  for (const year of years) {
+    if (!(await goto(page, `${BASE}/${mk}/${model}/${year}/`))) continue;
+    const styles = await childStyles(page, new RegExp(`^/${mk}/${model}/${year}/([^/?#]+)/?$`));
+    if (!styles.length) continue;
+    ((taxonomy[mk] ??= {})[model] ??= {})[year] = styles;
+    writeFileSync(OUT, JSON.stringify(taxonomy)); // checkpoint after each year
+    const labelled = styles.filter((s) => s.label).length;
+    console.log(`  ${mk}/${model}/${year}: ${styles.length} styles (${labelled} labelled)`);
+  }
+}
+
+interface ModelTarget {
+  make: string;
+  model: string;
+  year?: string;
+}
+
+async function scrape(
+  page: Page,
+  makeFilter: string[],
+  modelTargets: ModelTarget[],
+): Promise<void> {
   const taxonomy: KbbTaxonomy = existsSync(OUT)
     ? (JSON.parse(readFileSync(OUT, "utf8")) as KbbTaxonomy)
     : {};
-  const makes = makeFilter.length
-    ? MAKES.filter((m) => makeFilter.includes(resolveMakeSlug(m)) || makeFilter.includes(m.toLowerCase()))
-    : MAKES;
 
-  for (const make of makes) {
-    const mk = resolveMakeSlug(make);
-    if (!(await goto(page, `${BASE}/${mk}/`))) continue;
-    // First segment after the make on ANY link (models are linked with a year,
-    // e.g. /honda/accord/2025/, so don't require a clean /honda/accord/ path).
-    const models = (await childSlugs(page, new RegExp(`^/${mk}/([^/?#]+)/`))).filter(isModelSlug);
-    console.log(`${make}: ${models.length} models`);
+  // Targeted models first — these bypass make-page discovery, so they reach
+  // discontinued models (e.g. mazda/tribute) the make page no longer links.
+  for (const t of modelTargets) {
+    const mk = resolveMakeSlug(t.make);
+    console.log(`target ${mk}/${t.model}${t.year ? `/${t.year}` : ""}`);
+    await scrapeModel(page, taxonomy, mk, t.model, t.year);
+  }
 
-    for (const model of models) {
-      if (!(await goto(page, `${BASE}/${mk}/${model}/`))) continue;
-      const years = await childSlugs(page, new RegExp(`^/${mk}/${model}/((?:19|20)\\d\\d)/?$`));
-
-      for (const year of years) {
-        if (!(await goto(page, `${BASE}/${mk}/${model}/${year}/`))) continue;
-        const styles = await childStyles(page, new RegExp(`^/${mk}/${model}/${year}/([^/?#]+)/?$`));
-        if (!styles.length) continue;
-        ((taxonomy[mk] ??= {})[model] ??= {})[year] = styles;
-        writeFileSync(OUT, JSON.stringify(taxonomy)); // checkpoint after each year
-        const labelled = styles.filter((s) => s.label).length;
-        console.log(`  ${mk}/${model}/${year}: ${styles.length} styles (${labelled} labelled)`);
-      }
+  // Full make crawl: when makes were named, or when nothing at all was specified
+  // (bare `scrape` = everything). Pure targeted runs skip it.
+  if (makeFilter.length || modelTargets.length === 0) {
+    const makes = makeFilter.length
+      ? MAKES.filter((m) => makeFilter.includes(resolveMakeSlug(m)) || makeFilter.includes(m.toLowerCase()))
+      : MAKES;
+    for (const make of makes) {
+      const mk = resolveMakeSlug(make);
+      if (!(await goto(page, `${BASE}/${mk}/`))) continue;
+      // First segment after the make on ANY link (models are linked with a year,
+      // e.g. /honda/accord/2025/, so don't require a clean /honda/accord/ path).
+      const models = (await childSlugs(page, new RegExp(`^/${mk}/([^/?#]+)/`))).filter(isModelSlug);
+      console.log(`${make}: ${models.length} models`);
+      for (const model of models) await scrapeModel(page, taxonomy, mk, model);
     }
   }
+
   const entries = Object.values(taxonomy).flatMap((m) => Object.values(m).flatMap(Object.keys)).length;
   console.log(`\nFetched ok: ${stats.ok}  blocked/failed: ${stats.blocked}`);
   if (stats.ok === 0) {
@@ -179,7 +221,15 @@ async function scrape(page: Page, makeFilter: string[]): Promise<void> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const isProbe = args.includes("--probe");
-  const makeFilter = args.filter((a) => !a.startsWith("--")).map((a) => a.toLowerCase());
+  const positional = args.filter((a) => !a.startsWith("--")).map((a) => a.toLowerCase());
+  // `make/model` or `make/model/year` are targeted models; bare tokens are makes.
+  const modelTargets: ModelTarget[] = positional
+    .filter((a) => a.includes("/"))
+    .map((a) => {
+      const [make, model, year] = a.split("/");
+      return { make: make!, model: slugify(model ?? ""), ...(year ? { year } : {}) };
+    });
+  const makeFilter = positional.filter((a) => !a.includes("/"));
 
   // Real installed Chrome + a persistent profile beats bundled Chromium against
   // Akamai: genuine UA/client-hints, no spoof mismatch, and the _abck sensor
@@ -212,7 +262,7 @@ async function main(): Promise<void> {
     await goto(page, `${BASE}/`);
     await sleep(WARMUP);
     if (isProbe) await probe(page);
-    else await scrape(page, makeFilter);
+    else await scrape(page, makeFilter, modelTargets);
   } finally {
     await context.close();
   }

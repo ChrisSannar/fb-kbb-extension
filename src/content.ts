@@ -1,18 +1,17 @@
 import { parseVehicle, type ListingInput, type ParsedVehicle } from "./parse-listing";
-import { buildKbbUrl, slugify } from "./url-builder";
-import { resolveMakeSlug } from "./makes";
-import { selectStyle, lookupStyles } from "./select-style";
-import type { KbbTaxonomy } from "./taxonomy";
-import taxonomyData from "../extension/taxonomy.json";
-
-const TAXONOMY = taxonomyData as KbbTaxonomy;
 
 /** What the popup asks for, and what it gets back. */
 export interface KbbRequest {
   type: "GET_KBB";
 }
+/**
+ * The popup owns URL-building and the editable make/model/year/style form now,
+ * so the content script's only job is to read the listing and hand back the
+ * best-effort parse. `vehicle` is null when the page is a listing we couldn't
+ * parse — the popup still shows empty, editable fields in that case.
+ */
 export type KbbResult =
-  | { ok: true; vehicle: ParsedVehicle; kbbUrl: string }
+  | { ok: true; vehicle: ParsedVehicle | null }
   | { ok: false; error: string };
 
 /** Listing title — FB renders it as the page's main <h1>. */
@@ -39,23 +38,13 @@ function readFields(): Record<string, string> {
   return fields;
 }
 
-/** Parse the current page and build a KBB URL, or explain why we can't. */
+/** Parse the current page, or explain why this isn't a listing. */
 function buildResult(): KbbResult {
   if (!location.pathname.includes("/marketplace/item/")) {
     return { ok: false, error: "Open a Facebook Marketplace vehicle listing first." };
   }
   const input: ListingInput = { title: readTitle(), fields: readFields() };
-  const v = parseVehicle(input);
-  if (!v) {
-    return { ok: false, error: "Couldn't read the year, make, and model from this listing." };
-  }
-  const makeSlug = resolveMakeSlug(v.make);
-  const modelSlug = slugify(v.model);
-  // Phase 2: exact Style from the bundled Taxonomy; falls back to year-level
-  // (v1 behaviour) when the vehicle isn't in the Taxonomy.
-  const style = selectStyle(lookupStyles(TAXONOMY, makeSlug, modelSlug, v.year), v.trim);
-  const kbbUrl = buildKbbUrl({ makeSlug, modelSlug, year: v.year, style });
-  return { ok: true, vehicle: v, kbbUrl };
+  return { ok: true, vehicle: parseVehicle(input) };
 }
 
 chrome.runtime.onMessage.addListener(
